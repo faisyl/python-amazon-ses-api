@@ -103,11 +103,11 @@ class AmazonSES:
 
 
 class EmailMessage:
-    def __init__(self):
+    def __init__(self, subject=None, bodyHtml=None, bodyText=None):
         self.charset = 'UTF-8'
-        self.subject = None
-        self.bodyHtml = None
-        self.bodyText = None    
+        self.subject = subject
+        self.bodyHtml = bodyHtml
+        self.bodyText = bodyText
 
 
 
