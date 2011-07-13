@@ -5,9 +5,6 @@ try:
 except ImportError, excp:
     from distutils.core import setup
                     
-import amazon_ses
-import os
-
 setup(  name='amazon-ses',
         description = 'Python API for Amazon Simple Email Service',
         author= 'Vladimir Pankratiev',
