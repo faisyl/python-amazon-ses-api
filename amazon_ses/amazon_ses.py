@@ -77,9 +77,11 @@ class AmazonSES:
     
     def listVerifiedEmailAddresses(self):
         return self._performAction('ListVerifiedEmailAddresses')
-    
-    def sendEmail(self, source, toAddresses, message, replyToAddresses=None, returnPath=None, ccAddresses=None, bccAddresses=None):
-        params = { 'Source': source }
+
+    def sendEmail(self, source, toAddresses, message, replyToAddresses=[], returnPath=None, ccAddresses=None, bccAddresses=None):
+        params = {'Source': source}
+        for index, replyAddress in enumerate(replyToAddresses):
+            params['ReplyToAddresses.member.%d' % index+1] = replyAddress
         for objName, addresses in zip(["ToAddresses", "CcAddresses", "BccAddresses"], [toAddresses, ccAddresses, bccAddresses]):
             if addresses:
                 if not isinstance(addresses, basestring) and getattr(addresses, '__iter__', False):
@@ -116,11 +118,14 @@ class AmazonError(Exception):
         self.errorType = errorType
         self.code = code
         self.message = message
+    def __str__(self):
+        return self.message
 
 class AmazonAPIError(Exception):
     def __init__(self, message):
         self.message = message
-
+    def __str__(self):
+        return self.message
 
 
 class AmazonResult:
@@ -259,5 +264,5 @@ class AmazonResponseParser:
             elif actionName == 'ListVerifiedEmailAddresses':
                 result = self._parseListVerifiedEmails(actionName, xmlResponse)
             else:
-                raise AmazonAPIError('Action %s is not supported. Please contact: vladimir@tagmask.com' % (actionName,))
+                raise AmazonAPIError('Action %s is not supported.' % (actionName,))
         return result
