@@ -4,6 +4,7 @@
 *.swp
 *.swo
 pip-log.txt*
+amazon_ses.egg-info/
 *.swn
 # Emacs backup files & locks
 \#*
