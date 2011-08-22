@@ -24,8 +24,13 @@ import hashlib
 import hmac
 import logging
 import base64
-from datetime import datetime
-from xml.etree.ElementTree import XML
+import datetime
+
+# Try to import the (much faster) C version of ElementTree
+try:
+    from xml.etree import cElementTree as ET
+except ImportError:
+    from xml.etree import ElementTree as ET
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +46,7 @@ class AmazonSES:
     
     def _getHeaders(self):
         headers = { 'Content-type': 'application/x-www-form-urlencoded' }
-        d = datetime.utcnow()
+        d = datetime.datetime.utcnow()
         dateValue = d.strftime('%a, %d %b %Y %H:%M:%S GMT')
         headers['Date'] = dateValue
         signature = self._getSignature(dateValue)
@@ -145,12 +150,12 @@ class AmazonSendQuota(AmazonResult):
         self.sentLast24Hours = sentLast24Hours
 
 class AmazonSendDataPoint:
-    def __init__(self, bounces, complaints, deliveryAttempts, rejects, timestamp):
-        self.bounces = bounces
-        self.complaints = complaints
-        self.deliveryAttempts = deliveryAttempts
-        self.rejects = rejects
-        self.timestamp = timestamp
+    def __init__(self, xmlResponse, member):
+        self.timestamp        = datetime.datetime.strptime(xmlResponse.getChildTextFromNode(member, 'Timestamp'), '%Y-%m-%dT%H:%M:%SZ')
+        self.deliveryAttempts = int(xmlResponse.getChildTextFromNode(member, 'DeliveryAttempts'))
+        self.bounces          = int(xmlResponse.getChildTextFromNode(member, 'Bounces'))
+        self.complaints       = int(xmlResponse.getChildTextFromNode(member, 'Complaints'))
+        self.rejects          = int(xmlResponse.getChildTextFromNode(member, 'Rejects'))
 
 class AmazonSendStatistics(AmazonResult):
     def __init__(self, requestId):
@@ -161,9 +166,10 @@ class AmazonVerifiedEmails(AmazonSendStatistics):
     pass
 
 class AmazonResponseParser:
+    # FIXME: This XML structure is way too rigid and complex, tastes like Java - needs more flexibility
     class XmlResponse:
         def __init__(self, str):
-            self._rootElement = XML(str)
+            self._rootElement = ET.XML(str)
             self._namespace = self._rootElement.tag[1:].split("}")[0]
         
         def checkResponseName(self, name):
@@ -189,6 +195,20 @@ class AmazonResponseParser:
             node = self.getChild(*itemPath)
             return node.text
         
+        def getChildFromNode(self, node, *itemPath):
+            child = self._findNode(node, self._namespace, *itemPath)
+            if child is not None:
+                return child
+            else:
+                raise AmazonAPIError('Node with the specified path was not found.')
+
+        def getChildTextFromNode(self, node, *itemPath):
+            child = self.getChildFromNode (node, *itemPath)
+            return child.text
+
+        def getChildren(self, node):
+            return node.getchildren()
+
         def _fixTag(self, namespace, tag):
             return '{%s}%s' % (namespace, tag)
         
@@ -218,9 +238,14 @@ class AmazonResponseParser:
             sentLast24Hours = float(value)
             return AmazonSendQuota(requestId, max24HourSend, maxSendRate, sentLast24Hours)
     
-    #def _parseSendStatistics(self, actionName, xmlResponse):
-    #    if xmlResponse.checkActionName(actionName):
-    #        requestId = xmlResponse.getChildText('ResponseMetadata', 'RequestId')
+    def _parseSendStatistics(self, actionName, xmlResponse):
+        if xmlResponse.checkActionName(actionName):
+            requestId = xmlResponse.getChildText('ResponseMetadata', 'RequestId')
+            result = AmazonSendStatistics(requestId)
+            send_data_points = xmlResponse.getChild('GetSendStatisticsResult', 'SendDataPoints')
+            for member in send_data_points:
+                result.members.append(AmazonSendDataPoint(xmlResponse, member))
+            return result
     
     def _parseListVerifiedEmails(self, actionName, xmlResponse):
         if xmlResponse.checkActionName(actionName):
@@ -259,8 +284,8 @@ class AmazonResponseParser:
                 result = self._parseSendEmail(actionName, xmlResponse)
             elif actionName == 'GetSendQuota':
                 result = self._parseSendQuota(actionName, xmlResponse)
-            #elif actionName == 'GetSendStatistics':
-            #    result = self._parseSendStatistics(actionName, xmlResponse)
+            elif actionName == 'GetSendStatistics':
+                result = self._parseSendStatistics(actionName, xmlResponse)
             elif actionName == 'ListVerifiedEmailAddresses':
                 result = self._parseListVerifiedEmails(actionName, xmlResponse)
             else:
