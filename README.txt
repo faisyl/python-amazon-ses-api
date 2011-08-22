@@ -2,6 +2,11 @@ Python API for Amazon Simple Email Service
 http://aws.amazon.com/ses/
 ===============
 
+Installation:
+=============
+python setup.py build
+python setup.py install
+
 Description
 ===============
 Here is an example of how to send an email using the API:
