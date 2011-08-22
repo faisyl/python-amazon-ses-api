@@ -34,11 +34,11 @@ class AmazonSES:
         self._accessKeyID = accessKeyID
         self._secretAccessKey = secretAccessKey
         self._responseParser = AmazonResponseParser()
-
+    
     def _getSignature(self, dateValue):
         h = hmac.new(key=self._secretAccessKey, msg=dateValue, digestmod=hashlib.sha256)
         return base64.b64encode(h.digest()).decode()
-
+    
     def _getHeaders(self):
         headers = { 'Content-type': 'application/x-www-form-urlencoded' }
         d = datetime.utcnow()
@@ -47,7 +47,7 @@ class AmazonSES:
         signature = self._getSignature(dateValue)
         headers['X-Amzn-Authorization'] = 'AWS3-HTTPS AWSAccessKeyId=%s, Algorithm=HMACSHA256, Signature=%s' % (self._accessKeyID, signature)
         return headers
-
+    
     def _performAction(self, actionName, params=None):
         if not params:
             params = {}
@@ -60,24 +60,24 @@ class AmazonSES:
         responseResult = response.read()
         conn.close()
         return self._responseParser.parse(actionName, response.status, response.reason, responseResult)
-
+    
     def verifyEmailAddress(self, emailAddress):
         params = { 'EmailAddress': emailAddress }
         return self._performAction('VerifyEmailAddress', params)
-
+    
     def deleteVerifiedEmailAddress(self, emailAddress):
         params = { 'EmailAddress': emailAddress }
         return self._performAction('DeleteVerifiedEmailAddress', params)
-
+    
     def getSendQuota(self):
         return self._performAction('GetSendQuota')
-
+    
     def getSendStatistics(self):
         return self._performAction('GetSendStatistics')
-
+    
     def listVerifiedEmailAddresses(self):
         return self._performAction('ListVerifiedEmailAddresses')
-
+    
     def sendEmail(self, source, toAddresses, message, replyToAddresses=None, returnPath=None, ccAddresses=None, bccAddresses=None):
         params = { 'Source': source }
         for objName, addresses in zip(["ToAddresses", "CcAddresses", "BccAddresses"], [toAddresses, ccAddresses, bccAddresses]):
@@ -160,48 +160,48 @@ class AmazonResponseParser:
         def __init__(self, str):
             self._rootElement = XML(str)
             self._namespace = self._rootElement.tag[1:].split("}")[0]
-
+        
         def checkResponseName(self, name):
             if self._rootElement.tag == self._fixTag(self._namespace, name):
                 return True
             else:
                 raise AmazonAPIError('ErrorResponse is invalid.')
-
+        
         def checkActionName(self, actionName):
             if self._rootElement.tag == self._fixTag(self._namespace, ('%sResponse' % actionName)):
                 return True
             else:
                 raise AmazonAPIError('Response of action "%s" is invalid.' % actionName)
-
+        
         def getChild(self, *itemPath):
             node = self._findNode(self._rootElement, self._namespace, *itemPath)
             if node != None:
                 return node
             else:
                 raise AmazonAPIError('Node with the specified path was not found.')
-
+        
         def getChildText(self, *itemPath):
             node = self.getChild(*itemPath)
             return node.text
-
+        
         def _fixTag(self, namespace, tag):
             return '{%s}%s' % (namespace, tag)
-
+        
         def _findNode(self, rootElement, namespace, *args):
             match = '.'
             for s in args:
                 match += '/{%s}%s' % (namespace, s)
             return rootElement.find(match)
 
-
+    
     def __init__(self):
         self._simpleResultActions = ['DeleteVerifiedEmailAddress', 'VerifyEmailAddress']
-
+    
     def _parseSimpleResult(self, actionName, xmlResponse):
         if xmlResponse.checkActionName(actionName):
             requestId = xmlResponse.getChildText('ResponseMetadata', 'RequestId')
             return AmazonResult(requestId)
-
+    
     def _parseSendQuota(self, actionName, xmlResponse):
         if xmlResponse.checkActionName(actionName):
             requestId = xmlResponse.getChildText('ResponseMetadata', 'RequestId')
@@ -212,11 +212,11 @@ class AmazonResponseParser:
             value = xmlResponse.getChildText('GetSendQuotaResult', 'SentLast24Hours')
             sentLast24Hours = float(value)
             return AmazonSendQuota(requestId, max24HourSend, maxSendRate, sentLast24Hours)
-
+    
     #def _parseSendStatistics(self, actionName, xmlResponse):
     #    if xmlResponse.checkActionName(actionName):
     #        requestId = xmlResponse.getChildText('ResponseMetadata', 'RequestId')
-
+    
     def _parseListVerifiedEmails(self, actionName, xmlResponse):
         if xmlResponse.checkActionName(actionName):
             requestId = xmlResponse.getChildText('ResponseMetadata', 'RequestId')
@@ -225,25 +225,25 @@ class AmazonResponseParser:
             for addr in node:
                 result.members.append(addr.text)
             return result
-
+    
     def _parseSendEmail(self, actionName, xmlResponse):
         if xmlResponse.checkActionName(actionName):
             requestId = xmlResponse.getChildText('ResponseMetadata', 'RequestId')
             messageId = xmlResponse.getChildText('SendEmailResult', 'MessageId')
             return AmazonSendEmailResult(requestId, messageId)
-
+    
     def _raiseError(self, xmlResponse):
         if xmlResponse.checkResponseName('ErrorResponse'):
             errorType = xmlResponse.getChildText('Error', 'Type')
             code = xmlResponse.getChildText('Error', 'Code')
             message = xmlResponse.getChildText('Error', 'Message')
             raise AmazonError(errorType, code, message)
-
+    
     def parse(self, actionName, statusCode, reason, responseResult):
         xmlResponse = self.XmlResponse(responseResult)
         log.info('Response status code: %s, reason: %s', statusCode, reason)
         log.debug(responseResult)
-
+        
         result = None
         if statusCode != 200:
             self._raiseError(xmlResponse)
