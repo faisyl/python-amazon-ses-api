@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 setup(  
     name         = 'amazon-ses',
     version      = '0.2',
-    packages     = find_packages(),
+    package_dir  = {'': 'amazon_ses'},
     description  = 'Python API for Amazon Simple Email Service',
     author       = 'Vladimir Pankratiev',
     url          = 'http://tagmask.com/vladimir/profile',
